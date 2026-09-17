@@ -1,0 +1,11 @@
+node_modules/
+.cert/
+*.log
+tests/
+tools/
+docs/
+assets/source/
+.github/
+project.md
+LICENSE
+package-lock.json
