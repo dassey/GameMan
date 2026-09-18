@@ -1,182 +1,328 @@
 import * as THREE from 'three';
-import { World } from './world.js';
+import { Room } from './room.js';
 import { Player } from './player.js';
-import { loadAtlas, AgentSprite } from './sprites.js';
-import { Particles, Collectibles, Enemies, Guide, GoldenGlasses } from './entities.js';
+import { Grapple } from './grapple.js';
+import { Fruits, Salad } from './fruit.js';
+import { Utensils } from './utensils.js';
+import { Toppings } from './toppings.js';
 import { Progression } from './progression.js';
+import { Particles } from './fx.js';
 import { HUD } from './hud.js';
 import { Audio } from './audio.js';
+import { Grain } from './grain.js';
 
 const $ = (id) => document.getElementById(id);
+const CAM_OFFSET = new THREE.Vector3(0, 22, 13);
+const aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1);
+const raycaster = new THREE.Raycaster();
+const mouseNDC = new THREE.Vector2(0, -0.5);
+const aimPoint = new THREE.Vector3(0, 1, -10);
+const tmp = new THREE.Vector3();
+const noUtensils = { hitTest: () => null };
 
-async function boot() {
-  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.xr.enabled = true;
-  renderer.xr.setReferenceSpaceType('local-floor');
-  renderer.xr.setFramebufferScaleFactor(1.0);
-  renderer.domElement.id = 'gl';
-  document.body.appendChild(renderer.domElement);
-  const pixelScales = [0.5, 0.34, 1];
-  let pixelIdx = 0;
-  const applyPixel = () => renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * pixelScales[pixelIdx]);
-  applyPixel();
-
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x5a636c);
-  scene.fog = new THREE.FogExp2(0x5a636c, 0.011);
-  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 400);
-
-  scene.add(new THREE.HemisphereLight(0xbfc8d6, 0x3a4a30, 1.6));
-  const sun = new THREE.DirectionalLight(0xfff2d8, 2.2); sun.position.set(40, 70, 20); scene.add(sun);
-
-  await loadAtlas();
-  const audio = new Audio();
-  const prog = new Progression();
-  const world = new World(scene, 1337);
-  const player = new Player({ renderer, camera, scene, world, audio });
-  const particles = new Particles(scene);
-  const collectibles = new Collectibles(scene, world);
-  const enemies = new Enemies(scene, world, particles, audio);
-  const summit = world.cellCenter(world.summitCell[0], world.summitCell[1]);
-  const glasses = new GoldenGlasses(scene, summit);
-  const guide = new Guide(scene, new THREE.Vector3(3, world.heightAt(3, -1), -1),
-    'COLLECT SPARKS. PUNCH GOLEMS.\nCLIMB TO THE YELLOW BEAM\nAND GRAB THE GOLDEN GLASSES!\n\n1m ledges: walk. 2m: jump.');
-  const hud = new HUD(player, prog);
-  enemies.populate(prog.difficulty);
-
-  const applyStats = () => { player.maxHP = prog.maxHP; player.damage = prog.damage; player.speed = prog.speed; };
-  applyStats(); player.hp = player.maxHP;
-  if (prog.saved && prog.saved.pos) {
-    const p = prog.saved.pos; player.respawn(new THREE.Vector3(p[0], p[1], p[2])); player.hp = prog.saved.hp || player.maxHP;
+function drawLemon(canvas) {
+  const w = canvas.width = 520, h = canvas.height = 520;
+  const g = canvas.getContext('2d');
+  g.clearRect(0, 0, w, h);
+  g.save();
+  g.translate(w / 2, h / 2);
+  g.rotate(-0.25);
+  g.fillStyle = '#f3e03a';
+  g.strokeStyle = '#3a2f10';
+  g.lineWidth = 10;
+  g.beginPath();
+  g.ellipse(0, 0, 215, 150, 0, 0, Math.PI * 2);
+  g.fill();
+  g.stroke();
+  for (const s of [-1, 1]) {
+    g.beginPath();
+    g.moveTo(s * 190, -45);
+    g.lineTo(s * 255, -10);
+    g.lineTo(s * 190, 40);
+    g.closePath();
+    g.fill();
+    g.stroke();
   }
-
-  prog.on('levelup', (lv) => {
-    applyStats(); player.hp = player.maxHP;
-    audio.levelup(); guide.cheer();
-    particles.burst(player.pos.clone().add(new THREE.Vector3(0, 1, 0)), 60, 0xffe94a, 5, 1.6, 4);
-    hud.message(`LEVEL ${lv}!`, `HP ${prog.maxHP}  DMG ${prog.damage}  SPEED ${prog.speed.toFixed(1)}`, 3.5);
-    hud.flash('rgba(255,233,74,0.35)');
-  });
-
-  player.onPunch = (origin, dir, hand, power) => enemies.punch(origin, dir, player.damage * power, (e) => {
-    prog.kills++; prog.addScore(e.score); prog.addXP(e.xp); player.heal(5);
-    for (let i = 0; i < 3; i++) collectibles.spawnSpark(e.pos);
-    hud.message(`+${e.score}`, e.kind === 'golem' ? 'GOLEM SMASHED' : 'SHADE DISPELLED', 1.2);
-  });
-  const prevHP = { v: player.hp };
-
-  const overlay = $('overlay'), vrBtn = $('vrbtn'), playBtn = $('playbtn'), resetBtn = $('resetbtn');
-  const startDesktop = () => { audio.init(); audio.resume(); overlay.style.display = 'none'; renderer.domElement.requestPointerLock?.(); };
-  playBtn.addEventListener('click', startDesktop);
-  renderer.domElement.addEventListener('click', () => { if (!player.inXR && document.pointerLockElement !== renderer.domElement && overlay.style.display === 'none') renderer.domElement.requestPointerLock?.(); });
-  document.addEventListener('pointerlockchange', () => { $('hint').style.opacity = document.pointerLockElement ? 0 : 1; });
-  resetBtn.addEventListener('click', () => { if (confirm('Reset all progress?')) { prog.reset(); location.reload(); } });
-
-  let xrSession = null;
-  if (navigator.xr) {
-    navigator.xr.isSessionSupported('immersive-vr').then((ok) => {
-      vrBtn.disabled = !ok;
-      vrBtn.textContent = ok ? 'ENTER VR (Quest)' : 'VR NOT AVAILABLE';
-      if (!ok) $('vrnote').textContent = 'Open this page in the Meta Quest Browser over HTTPS to play in VR.';
-    }).catch(() => { vrBtn.disabled = true; });
-  } else { vrBtn.disabled = true; vrBtn.textContent = 'VR NOT AVAILABLE'; $('vrnote').textContent = 'WebXR is not available in this browser. Use the Meta Quest Browser over HTTPS.'; }
-  vrBtn.addEventListener('click', async () => {
-    audio.init(); audio.resume();
-    if (xrSession) { xrSession.end(); return; }
-    try {
-      xrSession = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] });
-      xrSession.addEventListener('end', () => { xrSession = null; overlay.style.display = ''; vrBtn.textContent = 'ENTER VR (Quest)'; });
-      await renderer.xr.setSession(xrSession);
-      overlay.style.display = 'none';
-      vrBtn.textContent = 'EXIT VR';
-      hud.message('AGENT PIXEL', 'Left stick: move  Right stick: turn  A/X: jump  Swing fists to punch', 5);
-    } catch (e) { console.error(e); $('vrnote').textContent = 'Could not start VR: ' + e.message; }
-  });
-
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyV' && !player.inXR) { player.thirdPerson = !player.thirdPerson; player.desktopHands.visible = !player.thirdPerson; avatar.visible = player.thirdPerson; }
-    if (e.code === 'KeyP') { pixelIdx = (pixelIdx + 1) % pixelScales.length; applyPixel(); hud.message(`PIXEL SCALE ${pixelScales[pixelIdx]}`, '', 1); }
-    if (e.code === 'KeyM') { audio.muted = !audio.muted; hud.message(audio.muted ? 'MUTED' : 'SOUND ON', '', 1); }
-    if (e.code === 'KeyN') { audio.musicOn = !audio.musicOn; hud.message(audio.musicOn ? 'MUSIC ON' : 'MUSIC OFF', '', 1); }
-    if (e.code === 'Escape') { overlay.style.display = ''; }
-    if (e.code === 'KeyR' && player.dead) doRespawn();
-  });
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
-
-  const avatar = new AgentSprite({ height: 1.8, fps: 9 }); avatar.visible = false; scene.add(avatar);
-
-  const doRespawn = () => {
-    player.respawn(world.spawn); prog.addScore(-Math.min(prog.score, 250));
-    hud.message('BACK ON YOUR FEET', 'lost 250 points', 2.5);
-  };
-
-  const clock = new THREE.Clock();
-  let saveT = 5, deadT = 0, hint = 0;
-  renderer.setAnimationLoop(() => {
-    const dt = Math.min(0.05, clock.getDelta());
-    player.update(dt);
-    particles.update(dt);
-    collectibles.update(dt);
-    enemies.update(dt, player, camera, prog.difficulty);
-    glasses.update(dt);
-    guide.update(dt, camera, player);
-    hud.update(dt);
-
-    if (avatar.visible) {
-      avatar.position.copy(player.pos);
-      avatar.update(dt, camera);
-      if (player.punchAnim.right > 0 || player.punchAnim.left > 0) avatar.play('punch'); else avatar.play(player.moving ? 'walk' : 'idle');
-    }
-
-    const centres = [player.pos.clone().add(new THREE.Vector3(0, 0.9, 0))];
-    if (player.inXR) for (const h of ['left', 'right']) if (player.hands[h]) centres.push(player.hands[h].getWorldPosition(new THREE.Vector3()));
-    for (const c of centres) {
-      const got = collectibles.collect(c, c === centres[0] ? 1.1 : 0.35);
-      if (got.sparks) {
-        prog.sparks += got.sparks; prog.addScore(10 * got.sparks); prog.addXP(5 * got.sparks); audio.pickup();
-        particles.burst(c, 4 * got.sparks, 0xffe94a, 2.5, 0.6, 3);
-      }
-      if (got.ties) {
-        prog.addScore(100 * got.ties); prog.addXP(40 * got.ties); player.heal(25); audio.tie();
-        particles.burst(c, 20, 0xf2c230, 4, 1.2, 3);
-        hud.message('GOLDEN TIE +100', '+25 HP', 1.8);
-      }
-      if (glasses.tryTake(c)) {
-        prog.wins++; prog.addScore(1000); prog.addXP(300); audio.win();
-        particles.burst(c, 80, 0xffe94a, 6, 2, 2);
-        hud.message('GOLDEN GLASSES FOUND!', `+1000 points. The valley grows more dangerous (x${prog.difficulty.toFixed(1)}).`, 6);
-        setTimeout(() => glasses.reset(world.randomCell(8, Infinity, 40)), 8000);
-      }
-    }
-
-    if (player.hp < prevHP.v) hud.flash();
-    prevHP.v = player.hp;
-    if (player.dead) {
-      deadT += dt;
-      if (deadT > 0.1 && deadT - dt <= 0.1) hud.message('KNOCKED OUT', player.inXR ? 'respawning...' : 'press R to respawn', 3);
-      if (deadT > 3) { deadT = 0; doRespawn(); }
-    }
-
-    saveT -= dt;
-    if (saveT <= 0) { saveT = 5; prog.save({ pos: [player.pos.x, player.pos.y, player.pos.z], hp: player.hp }); }
-
-    hint -= dt;
-    if (hint <= 0) {
-      hint = 25;
-      const d = Math.round(player.pos.distanceTo(glasses.pos));
-      if (!glasses.taken) hud.message('', `Golden Glasses: ${d}m away. Look for the yellow beam.`, 4);
-    }
-
-    renderer.render(scene, camera);
-  });
-
-  window.game = { renderer, scene, camera, world, player, enemies, collectibles, prog, glasses };
-  $('loading').style.display = 'none';
-  hud.message('AGENT PIXEL', 'Stone Valley', 3);
+  g.fillStyle = 'rgba(120,100,20,0.35)';
+  for (let i = 0; i < 90; i++) {
+    const a = Math.random() * 6.283, r = Math.random() * 180;
+    g.beginPath();
+    g.arc(Math.cos(a) * r, Math.sin(a) * r * 0.65, 2 + Math.random() * 4, 0, 6.283);
+    g.fill();
+  }
+  for (const s of [-1, 1]) {
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.ellipse(s * 70, -45, 40, 48, 0, 0, 6.283);
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#100c08';
+    g.beginPath();
+    g.arc(s * 62, -38, 14, 0, 6.283);
+    g.fill();
+    g.lineWidth = 14;
+    g.beginPath();
+    g.moveTo(s * 20, -110);
+    g.lineTo(s * 115, -80);
+    g.stroke();
+    g.lineWidth = 10;
+  }
+  g.fillStyle = '#100c08';
+  g.beginPath();
+  g.ellipse(0, 60, 95, 62, 0, 0, 6.283);
+  g.fill();
+  g.stroke();
+  g.fillStyle = '#b0202a';
+  g.beginPath();
+  g.ellipse(0, 85, 55, 30, 0, 0, 6.283);
+  g.fill();
+  g.fillStyle = '#ffffff';
+  for (let i = -3; i <= 3; i++) {
+    g.beginPath();
+    g.moveTo(i * 24 - 11, 4);
+    g.lineTo(i * 24 + 11, 4);
+    g.lineTo(i * 24, 34);
+    g.closePath();
+    g.fill();
+  }
+  g.restore();
 }
 
-boot().catch((e) => { console.error(e); $('loading').textContent = 'Failed to start: ' + e.message; });
+function boot() {
+  const canvas = $('gl');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+  renderer.setPixelRatio(0.5);
+  renderer.setSize(innerWidth, innerHeight);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x1c2f57);
+  scene.fog = new THREE.Fog(0x1c2f57, 70, 150);
+  const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 300);
+  scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x22305a, 1.6));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.8);
+  sun.position.set(20, 40, 10);
+  scene.add(sun);
+
+  const audio = new Audio();
+  const hud = new HUD();
+  const grain = new Grain($('grain'));
+  const room = new Room(scene);
+  const player = new Player(scene, room);
+  const grapple = new Grapple(scene, player);
+  const fruits = new Fruits(scene, room, 4);
+  const toppings = new Toppings(scene, room);
+  const particles = new Particles(scene);
+  const prog = new Progression();
+  let salad = null, utensils = null;
+  const state = { phase: 'menu', paused: false, loseT: 0, scared: false, ended: false };
+  const keys = new Set();
+  let fireQueued = false;
+
+  const playing = () => (state.phase === 'collect' || state.phase === 'defend') && !state.paused;
+
+  function openMenu() {
+    state.paused = true;
+    $('overlay').style.display = 'flex';
+    $('playbtn').textContent = 'CONTINUE';
+  }
+
+  function useTopping() {
+    if (!playing() || !player.held || player.knocked > 0) return;
+    if (player.held === 'ranch') {
+      if (!salad || Math.hypot(player.pos.x - salad.pos.x, player.pos.z - salad.pos.z) > salad.radius + 6) {
+        hud.message('GET CLOSER TO THE SALAD', 'ranch goes on the salad', 1.5);
+        return;
+      }
+      salad.activateRanch(9);
+      audio.spray();
+      hud.message('ACID RANCH!', 'utensils that touch the salad melt', 2.5);
+      particles.burst(tmp.set(salad.pos.x, 3, salad.pos.z), 40, 0xf4f1e6, 10, 1.2);
+    } else {
+      player.boostT = 10;
+      audio.grab();
+      hud.message('CROUTON SPEED!', 'zoom for 10 seconds', 1.5);
+    }
+    player.held = null;
+  }
+
+  function startDefend() {
+    salad = new Salad(scene, new THREE.Vector3(0, 0, -2));
+    utensils = new Utensils(scene, room, salad, player, particles, audio);
+    state.phase = 'defend';
+    hud.message('GIANT SALAD!', 'defend it from the utensils!', 3.5);
+    audio.levelup();
+    particles.burst(tmp.set(0, 3, -2), 60, 0x7ac043, 12, 1.4);
+  }
+
+  function startLose() {
+    state.phase = 'lose';
+    state.loseT = 0;
+    audio.fire();
+    $('flash').style.opacity = 0.45;
+    hud.message('THE SALAD IS GONE!', '', 2.5);
+  }
+
+  function showEnd(title, text) {
+    state.ended = true;
+    $('scare').style.display = 'none';
+    $('endtitle').textContent = title;
+    $('endtext').textContent = text;
+    $('end').style.display = 'flex';
+  }
+
+  function startWin() {
+    state.phase = 'win';
+    audio.win();
+    particles.burst(tmp.set(player.pos.x, 2, player.pos.z), 80, 0xf2d43c, 12, 1.6);
+    showEnd('YOU WIN!', `Mellow saved the salad. All ${utensils.total} utensils are gone. Level ${prog.level}.`);
+  }
+
+  addEventListener('keydown', (e) => {
+    keys.add(e.code);
+    if (e.code === 'Escape' && (state.phase === 'collect' || state.phase === 'defend')) {
+      if (state.paused) { state.paused = false; $('overlay').style.display = 'none'; } else openMenu();
+    }
+    if (e.code === 'KeyE') useTopping();
+    if (e.code === 'Space') e.preventDefault();
+  });
+  addEventListener('keyup', (e) => keys.delete(e.code));
+  addEventListener('blur', () => keys.clear());
+  addEventListener('mousemove', (e) => {
+    mouseNDC.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  });
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 0 && playing()) fireQueued = true;
+  });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  const inf = $('inf');
+  try { inf.checked = localStorage.getItem('sdn-infinite') === '1'; } catch (e) { }
+  player.infinite = inf.checked;
+  inf.onchange = () => {
+    player.infinite = inf.checked;
+    try { localStorage.setItem('sdn-infinite', inf.checked ? '1' : '0'); } catch (e) { }
+  };
+  $('playbtn').onclick = () => {
+    audio.init();
+    if (state.phase === 'menu') {
+      state.phase = 'collect';
+      hud.message('GRAB ALL THE FRUIT!', 'bananas, mangoes and oranges', 3.5);
+    }
+    state.paused = false;
+    $('overlay').style.display = 'none';
+  };
+  $('retrybtn').onclick = () => location.reload();
+  $('loading').style.display = 'none';
+
+  addEventListener('resize', () => {
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+  });
+
+  camera.position.copy(player.pos).add(CAM_OFFSET);
+  function tick(dt, now) {
+    grain.update();
+    if (playing()) {
+      room.update(dt, player.pos);
+      particles.update(dt);
+      raycaster.setFromCamera(mouseNDC, camera);
+      raycaster.ray.intersectPlane(aimPlane, aimPoint);
+      player.speedMul = prog.speedMul;
+      grapple.rangeBonus = prog.rangeBonus;
+      player.update(dt, keys, aimPoint);
+      if (fireQueued) {
+        fireQueued = false;
+        if (player.knocked <= 0 && grapple.fire(player.aim)) audio.shoot();
+      }
+      fruits.update(dt);
+      toppings.update(dt);
+      const got = fruits.collect(player.pos, player.radius);
+      if (got.length) {
+        audio.grab();
+        particles.burst(tmp.set(player.pos.x, 1.2, player.pos.z), 10, 0xf2d43c, 6);
+        prog.addXP(5 * got.length);
+        if (fruits.remaining === 0 && state.phase === 'collect') startDefend();
+        else hud.message(`${fruits.remaining} FRUIT LEFT`, '', 1);
+      }
+      const tp = toppings.pickup(player.pos, player.radius);
+      if (tp) {
+        player.held = tp;
+        audio.grab();
+        hud.message(tp === 'ranch' ? 'GOT RANCH' : 'GOT A CROUTON', 'press E to use it', 2);
+      }
+      if (state.phase === 'defend') {
+        salad.update(dt);
+        const ev = utensils.update(dt);
+        const hit = grapple.update(dt, utensils);
+        if (hit) {
+          ev.kills.push(utensils.kill(hit));
+          audio.hit();
+        }
+        for (const u of ev.playerHits) {
+          const r = player.takeDamage(12, u.pos);
+          if (r) audio.hurt();
+          if (r === 'ko') hud.message('MELLOW IS DOWN!', 'getting back up...', 2.5);
+        }
+        let xpGain = 0;
+        for (const xp of ev.kills) xpGain += xp;
+        if (xpGain) {
+          const ups = prog.addXP(xpGain);
+          if (ups) {
+            audio.levelup();
+            hud.message(`LEVEL ${prog.level}!`, 'faster, and the chain reaches further', 2);
+          }
+        }
+        if (ev.saladDamage) $('flash').style.opacity = 0.25;
+        else $('flash').style.opacity = 0;
+        if (utensils.killed >= utensils.total) startWin();
+        else if (salad.dead) startLose();
+      } else {
+        grapple.update(dt, noUtensils);
+      }
+      tmp.copy(player.pos).add(CAM_OFFSET);
+      camera.position.lerp(tmp, 1 - Math.pow(0.002, dt));
+      camera.lookAt(player.pos.x, 1, player.pos.z - 3);
+    } else if (state.phase === 'lose') {
+      state.loseT += dt;
+      particles.update(dt);
+      room.update(dt, player.pos);
+      if (state.loseT < 2.8) {
+        for (let k = 0; k < 8; k++) {
+          particles.spawn(player.pos.x + (Math.random() - 0.5) * 44, 28, player.pos.z + (Math.random() - 0.5) * 44,
+            (Math.random() - 0.5) * 3, -22 - Math.random() * 8, (Math.random() - 0.5) * 3,
+            Math.random() < 0.5 ? 0xff5a1a : 0xffc21a, 1.6, 0);
+        }
+        camera.position.x += (Math.random() - 0.5) * 0.4;
+        camera.position.y += (Math.random() - 0.5) * 0.4;
+      }
+      if (state.loseT > 2.6 && !state.scared) {
+        state.scared = true;
+        drawLemon($('lemon'));
+        $('scare').style.display = 'flex';
+        audio.scream();
+      }
+      if (state.loseT > 4.4 && !state.ended) showEnd('GAME OVER', 'The utensils ate the whole salad.');
+    } else if (state.phase === 'win') {
+      particles.update(dt);
+      room.update(dt, player.pos);
+      camera.position.x = player.pos.x + Math.sin(now / 1500) * 6;
+      camera.lookAt(player.pos.x, 1, player.pos.z);
+    }
+    hud.update({
+      salad, hp: player.hp, maxHp: player.maxHp, level: prog.level, xp: prog.xp, xpToNext: prog.xpToNext,
+      utensilsLeft: utensils ? utensils.remaining : null, fruitLeft: fruits.remaining, held: player.held, boost: player.boostT,
+    }, dt);
+    renderer.render(scene, camera);
+  }
+
+  let last = performance.now();
+  renderer.setAnimationLoop((now) => {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    tick(dt, now);
+  });
+
+  window.game = { scene, camera, room, player, grapple, fruits, toppings, prog, state, get salad() { return salad; }, get utensils() { return utensils; }, startDefend, tick };
+}
+
+boot();

@@ -1,6 +1,6 @@
-# GameMan
+# Salad Defender Ninja
 
-A small browser game. A pixel-art agent explores a 3D stone valley, collects sparks, punches rock golems and levels up. Runs in a desktop browser and in VR on a Meta Quest through WebXR.
+A small browser game. You are Mellow, a toy-sized ninja in a giant blue room. Grab all the bananas, mangoes and oranges, they turn into a giant salad, then defend the salad from 17 giant utensils with a knife on a chain.
 
 This is just a learning repo.
 
@@ -10,4 +10,4 @@ This is just a learning repo.
 npm run start:http
 ```
 
-Opens on http://localhost:8080. For the Quest, `npm start` serves the game over HTTPS on port 8443 (creates a self-signed certificate, needs openssl).
+Opens on http://localhost:8080.

@@ -3,71 +3,89 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Agent Pixel: Stone Valley</title>
+<title>Salad Defender Ninja</title>
 <style>
-  :root { --y: #ffe94a; }
-  html, body { margin: 0; height: 100%; background: #1b1d20; overflow: hidden; font-family: "Courier New", monospace; color: #fff; }
-  #gl { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; image-rendering: crisp-edges; }
-  #hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 2px 2px 0 #000; }
-  #top { position: absolute; top: 14px; left: 14px; display: flex; gap: 10px; align-items: center; }
-  #portrait { width: 96px; height: 48px; image-rendering: pixelated; background: #000; border: 3px solid var(--y); }
-  .bar { width: 220px; height: 16px; background: #222; border: 2px solid #000; margin-top: 4px; }
-  .bar > div { height: 100%; width: 100%; background: #4ad25a; }
+  :root { --y: #f2d43c; --ink: #14121f; --paper: #efe9d8; }
+  html, body { margin: 0; height: 100%; background: #1c2f57; overflow: hidden; font-family: "Comic Sans MS", "Chalkboard SE", "Segoe Print", cursive; color: var(--paper); }
+  #gl { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; image-rendering: crisp-edges; cursor: crosshair; }
+  #grain { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; opacity: 0.32; mix-blend-mode: overlay; image-rendering: pixelated; z-index: 2; }
+  #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(8,6,20,0.75) 100%); z-index: 3; }
+  #hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 2px 2px 0 var(--ink); z-index: 4; font-size: 15px; letter-spacing: 1px; }
+  #top { position: absolute; top: 14px; left: 16px; }
+  #level { font-weight: bold; font-size: 22px; color: var(--y); }
+  .bar { width: 220px; height: 16px; background: #23223a; border: 3px solid var(--ink); margin-top: 4px; box-shadow: 3px 3px 0 rgba(0,0,0,0.4); }
+  .bar > div { height: 100%; width: 100%; background: #4ad25a; transition: width .15s; }
   #xpbar { background: var(--y); }
-  #level { font-weight: bold; font-size: 20px; color: var(--y); }
-  #score { position: absolute; top: 14px; right: 18px; font-size: 30px; font-weight: bold; color: var(--y); letter-spacing: 3px; }
-  #stats { position: absolute; bottom: 12px; left: 14px; font-size: 13px; color: #ddd; }
-  #msg { position: absolute; top: 28%; width: 100%; text-align: center; font-size: 44px; font-weight: bold; color: var(--y); opacity: 0; transition: opacity .4s; }
-  #submsg { position: absolute; top: calc(28% + 60px); width: 100%; text-align: center; font-size: 18px; opacity: 0; transition: opacity .4s; }
-  #cross { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; background: var(--y); border: 1px solid #000; }
-  #flash { position: absolute; inset: 0; opacity: 0; transition: opacity .3s; }
-  #hint { position: absolute; bottom: 12px; right: 14px; font-size: 13px; color: #bbb; }
-  #overlay { position: fixed; inset: 0; background: rgba(10,12,14,0.86); display: flex; align-items: center; justify-content: center; z-index: 5; }
-  #panel { max-width: 640px; padding: 26px 34px; border: 4px solid var(--y); background: #111; box-shadow: 8px 8px 0 #000; }
-  h1 { margin: 0 0 4px; color: var(--y); font-size: 34px; letter-spacing: 2px; }
-  h2 { margin: 0 0 16px; font-size: 15px; color: #aaa; font-weight: normal; }
-  button { font-family: inherit; font-size: 18px; font-weight: bold; padding: 12px 20px; margin: 6px 8px 6px 0; background: var(--y); color: #111; border: 0; box-shadow: 4px 4px 0 #000; cursor: pointer; }
-  button:disabled { background: #555; color: #999; cursor: not-allowed; }
-  button.secondary { background: #333; color: #ddd; font-size: 13px; padding: 8px 12px; }
-  .cols { display: flex; gap: 24px; font-size: 13px; line-height: 1.6; }
+  #saladwrap { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #saladwrap .bar { width: 320px; height: 22px; margin: 4px auto 0; }
+  #saladbar { background: #7ac043; }
+  #right { position: absolute; top: 14px; right: 18px; text-align: right; font-size: 18px; font-weight: bold; color: var(--y); }
+  #fruit { color: #f5931e; }
+  #topping { position: absolute; bottom: 14px; left: 16px; font-size: 17px; font-weight: bold; color: var(--paper); }
+  #boost { position: absolute; bottom: 40px; left: 16px; font-size: 15px; color: #c89a5a; }
+  #hint { position: absolute; bottom: 14px; right: 16px; font-size: 13px; color: #b8c0d8; }
+  #msg { position: absolute; top: 26%; width: 100%; text-align: center; font-size: 46px; font-weight: bold; color: var(--y); opacity: 0; transition: opacity .3s; transform: rotate(-2deg); }
+  #submsg { position: absolute; top: calc(26% + 62px); width: 100%; text-align: center; font-size: 19px; opacity: 0; transition: opacity .3s; }
+  #flash { position: absolute; inset: 0; background: #d0301a; opacity: 0; transition: opacity .25s; }
+  #overlay, #end { position: fixed; inset: 0; background: rgba(10,12,24,0.82); display: flex; align-items: center; justify-content: center; z-index: 6; }
+  #end { display: none; }
+  .panel { max-width: 660px; padding: 26px 34px; border: 5px solid var(--y); background: #181a2c; box-shadow: 10px 10px 0 var(--ink); transform: rotate(-1deg); }
+  h1 { margin: 0 0 4px; color: var(--y); font-size: 40px; letter-spacing: 2px; line-height: 1.05; }
+  h2 { margin: 0 0 16px; font-size: 16px; color: #b8c0d8; font-weight: normal; }
+  button { font-family: inherit; font-size: 20px; font-weight: bold; padding: 12px 22px; margin: 6px 8px 6px 0; background: var(--y); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); cursor: pointer; }
+  button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+  .cols { display: flex; gap: 26px; font-size: 14px; line-height: 1.6; }
   .cols b { color: var(--y); }
-  #vrnote { font-size: 12px; color: #999; margin-top: 8px; }
-  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #111; z-index: 9; color: var(--y); font-size: 22px; }
+  label { display: block; margin-top: 14px; font-size: 15px; cursor: pointer; }
+  input[type=checkbox] { width: 18px; height: 18px; vertical-align: middle; accent-color: #f2d43c; }
+  #scare { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #f3e03a; z-index: 7; animation: shake .08s infinite; }
+  #scare canvas { width: min(90vw, 90vh); height: min(90vw, 90vh); animation: grow .5s ease-out; }
+  @keyframes shake { 0% { transform: translate(0,0); } 25% { transform: translate(-14px, 8px); } 50% { transform: translate(12px, -10px); } 75% { transform: translate(-8px, -12px); } 100% { transform: translate(10px, 12px); } }
+  @keyframes grow { from { transform: scale(0.1); } to { transform: scale(1); } }
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #181a2c; z-index: 9; color: var(--y); font-size: 24px; }
 </style>
 </head>
 <body>
-<div id="loading">LOADING STONE VALLEY...</div>
+<div id="loading">WASHING THE FRUIT...</div>
+<canvas id="gl"></canvas>
+<canvas id="grain"></canvas>
+<div id="vignette"></div>
 <div id="hud">
   <div id="top">
-    <img id="portrait" src="assets/sprites/portrait.png" alt="">
-    <div>
-      <div id="level">LV 1</div>
-      <div class="bar"><div id="hpbar"></div></div>
-      <div class="bar" style="height:8px"><div id="xpbar" style="width:0%"></div></div>
-    </div>
+    <div id="level">LV 1</div>
+    <div>MELLOW</div>
+    <div class="bar"><div id="hpbar"></div></div>
+    <div class="bar" style="height:8px"><div id="xpbar" style="width:0%"></div></div>
   </div>
-  <div id="score">000000</div>
+  <div id="saladwrap" style="display:none">
+    <div>SALAD</div>
+    <div class="bar"><div id="saladbar"></div></div>
+  </div>
+  <div id="right"><div id="left"></div><div id="fruit"></div></div>
+  <div id="boost"></div>
+  <div id="topping"></div>
   <div id="msg"></div><div id="submsg"></div>
-  <div id="cross"></div>
-  <div id="stats"></div>
-  <div id="hint">Click to lock the mouse · Esc for menu</div>
+  <div id="hint">WASD move · mouse aim · click throw knife · E use topping · Esc menu</div>
   <div id="flash"></div>
 </div>
 <div id="overlay">
-  <div id="panel">
-    <h1>AGENT PIXEL</h1>
-    <h2>Stone Valley — a 3D / VR adventure</h2>
+  <div class="panel">
+    <h1>SALAD DEFENDER NINJA</h1>
+    <h2>Mellow vs. the giant utensils</h2>
     <div class="cols">
-      <div><b>DESKTOP</b><br>WASD / arrows: move<br>Mouse: look · Shift: run<br>Space: jump (2 m ledges)<br>Left / right click: punch<br>V: third-person · P: pixel scale<br>M: mute · N: music · R: respawn</div>
-      <div><b>QUEST / VR</b><br>Left stick: move<br>Right stick: snap turn<br>A / X: jump<br>Swing your fists to punch<br>Touch sparks to collect<br>Left wrist: stats panel</div>
-      <div><b>GOAL</b><br>Collect yellow sparks (+10)<br>Golden ties (+100, heal)<br>Smash golems, dispel shades<br>Gain XP → level up<br>Find the Golden Glasses<br>under the yellow beam (+1000)</div>
+      <div><b>HOW TO PLAY</b><br>WASD / arrows: move<br>Mouse: aim<br>Click: throw the knife on a chain<br>E: use the topping you're holding<br>Esc: menu</div>
+      <div><b>THE PLAN</b><br>1. Grab every banana, mango and orange<br>2. They become a GIANT salad<br>3. Defend it from 17 utensils<br>Spoons pop up from underground<br>Forks spin and chase YOU<br>Knives go straight for the salad</div>
     </div>
-    <div style="margin-top:18px">
-      <button id="playbtn">PLAY ON DESKTOP</button>
-      <button id="vrbtn" disabled>CHECKING VR...</button>
-      <button id="resetbtn" class="secondary">RESET SAVE</button>
-    </div>
-    <div id="vrnote">Progress is saved automatically in this browser.</div>
+    <label><input type="checkbox" id="inf"> Infinite health for Mellow</label>
+    <div style="margin-top:14px"><button id="playbtn">PLAY</button></div>
+  </div>
+</div>
+<div id="scare"><canvas id="lemon"></canvas></div>
+<div id="end">
+  <div class="panel">
+    <h1 id="endtitle">GAME OVER</h1>
+    <h2 id="endtext"></h2>
+    <button id="retrybtn">PLAY AGAIN</button>
   </div>
 </div>
 <script type="importmap">
