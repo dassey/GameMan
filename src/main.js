@@ -10,6 +10,7 @@ import { Particles } from './fx.js';
 import { HUD } from './hud.js';
 import { Audio } from './audio.js';
 import { Grain } from './grain.js';
+import { VR } from './vr.js';
 
 const $ = (id) => document.getElementById(id);
 const CAM_OFFSET = new THREE.Vector3(0, 22, 13);
@@ -18,6 +19,8 @@ const raycaster = new THREE.Raycaster();
 const mouseNDC = new THREE.Vector2(0, -0.5);
 const aimPoint = new THREE.Vector3(0, 1, -10);
 const tmp = new THREE.Vector3();
+const rayOrigin = new THREE.Vector3();
+const rayDir = new THREE.Vector3();
 const noUtensils = { hitTest: () => null };
 
 function drawLemon(canvas) {
@@ -112,8 +115,9 @@ function boot() {
   const toppings = new Toppings(scene, room);
   const particles = new Particles(scene);
   const prog = new Progression();
+  const vr = new VR(renderer, scene, camera, player, room);
   let salad = null, utensils = null;
-  const state = { phase: 'menu', paused: false, loseT: 0, scared: false, ended: false };
+  const state = { phase: 'menu', paused: false, loseT: 0, scared: false, ended: false, vr: false };
   const keys = new Set();
   let fireQueued = false;
 
@@ -146,6 +150,8 @@ function boot() {
 
   function startDefend() {
     salad = new Salad(scene, new THREE.Vector3(0, 0, -2));
+    room.addCircle(salad.pos.x, salad.pos.z, salad.radius);
+    room.resolve(player.pos, player.radius);
     utensils = new Utensils(scene, room, salad, player, particles, audio);
     state.phase = 'defend';
     hud.message('GIANT SALAD!', 'defend it from the utensils!', 3.5);
@@ -164,9 +170,11 @@ function boot() {
   function showEnd(title, text) {
     state.ended = true;
     $('scare').style.display = 'none';
+    vr.lemon.hide();
     $('endtitle').textContent = title;
     $('endtext').textContent = text;
     $('end').style.display = 'flex';
+    if (state.vr) hud.message(title, 'press A to play again', 999);
   }
 
   function startWin() {
@@ -176,9 +184,18 @@ function boot() {
     showEnd('YOU WIN!', `Mellow saved the salad. All ${utensils.total} utensils are gone. Level ${prog.level}.`);
   }
 
+  function startGame() {
+    if (state.phase === 'menu') {
+      state.phase = 'collect';
+      hud.message('GRAB ALL THE FRUIT!', 'bananas, mangoes and oranges', 3.5);
+    }
+    state.paused = false;
+    $('overlay').style.display = 'none';
+  }
+
   addEventListener('keydown', (e) => {
     keys.add(e.code);
-    if (e.code === 'Escape' && (state.phase === 'collect' || state.phase === 'defend')) {
+    if (e.code === 'Escape' && (state.phase === 'collect' || state.phase === 'defend') && !state.vr) {
       if (state.paused) { state.paused = false; $('overlay').style.display = 'none'; } else openMenu();
     }
     if (e.code === 'KeyE') useTopping();
@@ -190,7 +207,7 @@ function boot() {
     mouseNDC.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   });
   canvas.addEventListener('mousedown', (e) => {
-    if (e.button === 0 && playing()) fireQueued = true;
+    if (e.button === 0 && playing() && !state.vr) fireQueued = true;
   });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -203,15 +220,36 @@ function boot() {
   };
   $('playbtn').onclick = () => {
     audio.init();
-    if (state.phase === 'menu') {
-      state.phase = 'collect';
-      hud.message('GRAB ALL THE FRUIT!', 'bananas, mangoes and oranges', 3.5);
-    }
-    state.paused = false;
-    $('overlay').style.display = 'none';
+    startGame();
   };
   $('retrybtn').onclick = () => location.reload();
   $('loading').style.display = 'none';
+
+  const vrbtn = $('vrbtn');
+  VR.supported().then((ok) => {
+    vrbtn.disabled = !ok;
+    vrbtn.textContent = ok ? 'ENTER VR' : 'NO VR HEADSET';
+  });
+  vrbtn.onclick = () => {
+    audio.init();
+    vr.enter().catch(() => { vrbtn.textContent = 'VR FAILED'; });
+  };
+  vr.onStart = () => {
+    state.vr = true;
+    startGame();
+  };
+  vr.onEnd = () => {
+    state.vr = false;
+    grapple.originObj = null;
+    camera.position.copy(player.pos).add(CAM_OFFSET);
+    if (state.phase === 'collect' || state.phase === 'defend') openMenu();
+  };
+  vr.onFire = (c) => {
+    if (!playing() || player.knocked > 0) return;
+    vr.controllerRay(c, rayOrigin, rayDir);
+    grapple.originObj = c;
+    if (grapple.fire(rayDir, rayOrigin)) audio.shoot();
+  };
 
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight);
@@ -222,14 +260,30 @@ function boot() {
   camera.position.copy(player.pos).add(CAM_OFFSET);
   function tick(dt, now) {
     grain.update();
+    let vrIn = null;
+    if (state.vr) {
+      vrIn = vr.input(dt);
+      if (vrIn.a) {
+        if (state.ended) location.reload();
+        else useTopping();
+      }
+      vr.lemon.update(dt);
+    }
     if (playing()) {
       room.update(dt, player.pos);
       particles.update(dt);
-      raycaster.setFromCamera(mouseNDC, camera);
-      raycaster.ray.intersectPlane(aimPlane, aimPoint);
       player.speedMul = prog.speedMul;
       grapple.rangeBonus = prog.rangeBonus;
-      player.update(dt, keys, aimPoint);
+      let move = null;
+      if (state.vr) {
+        vr.frameBegin();
+        move = { x: vrIn.move.x * 0.75, z: vrIn.move.z * 0.75 };
+      } else {
+        raycaster.setFromCamera(mouseNDC, camera);
+        raycaster.ray.intersectPlane(aimPlane, aimPoint);
+      }
+      player.update(dt, keys, state.vr ? null : aimPoint, move);
+      if (utensils) utensils.pushOut(player.pos, player.radius);
       if (fireQueued) {
         fireQueued = false;
         if (player.knocked <= 0 && grapple.fire(player.aim)) audio.shoot();
@@ -248,7 +302,7 @@ function boot() {
       if (tp) {
         player.held = tp;
         audio.grab();
-        hud.message(tp === 'ranch' ? 'GOT RANCH' : 'GOT A CROUTON', 'press E to use it', 2);
+        hud.message(tp === 'ranch' ? 'GOT RANCH' : 'GOT A CROUTON', state.vr ? 'press A to use it' : 'press E to use it', 2);
       }
       if (state.phase === 'defend') {
         salad.update(dt);
@@ -272,16 +326,19 @@ function boot() {
             hud.message(`LEVEL ${prog.level}!`, 'faster, and the chain reaches further', 2);
           }
         }
-        if (ev.saladDamage) $('flash').style.opacity = 0.25;
-        else $('flash').style.opacity = 0;
+        $('flash').style.opacity = ev.saladDamage ? 0.25 : 0;
         if (utensils.killed >= utensils.total) startWin();
         else if (salad.dead) startLose();
       } else {
         grapple.update(dt, noUtensils);
       }
-      tmp.copy(player.pos).add(CAM_OFFSET);
-      camera.position.lerp(tmp, 1 - Math.pow(0.002, dt));
-      camera.lookAt(player.pos.x, 1, player.pos.z - 3);
+      if (state.vr) {
+        vr.frameEnd();
+      } else {
+        tmp.copy(player.pos).add(CAM_OFFSET);
+        camera.position.lerp(tmp, 1 - Math.pow(0.002, dt));
+        camera.lookAt(player.pos.x, 1, player.pos.z - 3);
+      }
     } else if (state.phase === 'lose') {
       state.loseT += dt;
       particles.update(dt);
@@ -292,26 +349,36 @@ function boot() {
             (Math.random() - 0.5) * 3, -22 - Math.random() * 8, (Math.random() - 0.5) * 3,
             Math.random() < 0.5 ? 0xff5a1a : 0xffc21a, 1.6, 0);
         }
-        camera.position.x += (Math.random() - 0.5) * 0.4;
-        camera.position.y += (Math.random() - 0.5) * 0.4;
+        if (!state.vr) {
+          camera.position.x += (Math.random() - 0.5) * 0.4;
+          camera.position.y += (Math.random() - 0.5) * 0.4;
+        }
       }
       if (state.loseT > 2.6 && !state.scared) {
         state.scared = true;
-        drawLemon($('lemon'));
-        $('scare').style.display = 'flex';
+        if (state.vr) {
+          vr.lemon.show(drawLemon);
+        } else {
+          drawLemon($('lemon'));
+          $('scare').style.display = 'flex';
+        }
         audio.scream();
       }
       if (state.loseT > 4.4 && !state.ended) showEnd('GAME OVER', 'The utensils ate the whole salad.');
     } else if (state.phase === 'win') {
       particles.update(dt);
       room.update(dt, player.pos);
-      camera.position.x = player.pos.x + Math.sin(now / 1500) * 6;
-      camera.lookAt(player.pos.x, 1, player.pos.z);
+      if (!state.vr) {
+        camera.position.x = player.pos.x + Math.sin(now / 1500) * 6;
+        camera.lookAt(player.pos.x, 1, player.pos.z);
+      }
     }
-    hud.update({
+    const hs = {
       salad, hp: player.hp, maxHp: player.maxHp, level: prog.level, xp: prog.xp, xpToNext: prog.xpToNext,
       utensilsLeft: utensils ? utensils.remaining : null, fruitLeft: fruits.remaining, held: player.held, boost: player.boostT,
-    }, dt);
+    };
+    hud.update(hs, dt);
+    if (state.vr) vr.panel.update(dt, hs, hud.msgT > 0 ? hud.el.msg.textContent : '', hud.el.submsg.textContent);
     renderer.render(scene, camera);
   }
 
@@ -322,7 +389,7 @@ function boot() {
     tick(dt, now);
   });
 
-  window.game = { scene, camera, room, player, grapple, fruits, toppings, prog, state, get salad() { return salad; }, get utensils() { return utensils; }, startDefend, tick };
+  window.game = { scene, camera, room, player, grapple, fruits, toppings, prog, state, vr, get salad() { return salad; }, get utensils() { return utensils; }, startDefend, tick };
 }
 
 boot();

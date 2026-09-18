@@ -14,6 +14,7 @@ export class Grapple {
     this.rangeBonus = 0;
     this.speed = 34;
     this.travelled = 0;
+    this.originObj = null;
     this.knife = new THREE.Group();
     const blade = box(0.2, 1.4, 0.07, '#d8dce6');
     blade.position.y = 0.9;
@@ -42,10 +43,17 @@ export class Grapple {
     return this.state === 'idle';
   }
 
-  fire(dir) {
+  origin(out) {
+    if (this.originObj) return this.originObj.getWorldPosition(out);
+    this.player.handPos(out);
+    out.y = 1.2;
+    return out;
+  }
+
+  fire(dir, from = null) {
     if (!this.ready) return false;
-    this.player.handPos(this.pos);
-    this.pos.y = 1.2;
+    if (from) this.pos.copy(from);
+    else this.origin(this.pos);
     this.dir.copy(dir).normalize();
     this.travelled = 0;
     this.state = 'out';
@@ -57,14 +65,13 @@ export class Grapple {
   update(dt, utensils) {
     if (this.state === 'idle') return null;
     let hit = null;
-    this.player.handPos(tmp);
-    tmp.y = 1.2;
+    this.origin(tmp);
     if (this.state === 'out') {
       const step = this.speed * dt;
       this.pos.addScaledVector(this.dir, step);
       this.travelled += step;
       hit = utensils.hitTest(this.pos, 0.9);
-      if (hit || this.travelled >= this.range) this.state = 'back';
+      if (hit || this.travelled >= this.range || this.pos.y < 0.15) this.state = 'back';
       target.copy(this.pos).add(this.dir);
     } else {
       target.copy(tmp);
@@ -83,8 +90,8 @@ export class Grapple {
     this.knife.lookAt(target);
     this.knife.rotateX(Math.PI / 2);
     const a = this.chainGeo.attributes.position;
-    this.player.handPos(tmp);
-    a.setXYZ(0, tmp.x, 1.2, tmp.z);
+    this.origin(tmp);
+    a.setXYZ(0, tmp.x, tmp.y, tmp.z);
     a.setXYZ(1, this.pos.x, this.pos.y, this.pos.z);
     a.needsUpdate = true;
     return hit;

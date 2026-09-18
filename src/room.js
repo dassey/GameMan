@@ -8,6 +8,7 @@ export class Room {
   constructor(scene) {
     this.scene = scene;
     this.obstacles = [];
+    this.circles = [];
     this.spawnPoints = [];
     this.t = 0;
     this.tableFade = 1;
@@ -24,6 +25,25 @@ export class Room {
 
   block(x, z, hw, hd) {
     this.obstacles.push({ x, z, hw, hd });
+  }
+
+  addCircle(x, z, r) {
+    const c = { x, z, r };
+    this.circles.push(c);
+    return c;
+  }
+
+  static pushCircle(pos, r, x, z, cr) {
+    const dx = pos.x - x, dz = pos.z - z;
+    const d = Math.hypot(dx, dz), min = cr + r;
+    if (d >= min) return false;
+    if (d < 0.001) {
+      pos.x += min;
+    } else {
+      pos.x += (dx / d) * (min - d);
+      pos.z += (dz / d) * (min - d);
+    }
+    return true;
   }
 
   buildShell() {
@@ -158,6 +178,7 @@ export class Room {
     plug.position.set(31.2, 0.4, -12.6);
     plug.rotation.y = 0.5;
     this.scene.add(plug);
+    this.addCircle(31.2, -12.6, 0.9);
     for (const s of [-1, 1]) {
       const prong = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.7), new THREE.MeshBasicMaterial({ color: 0xc0c0c8 }));
       prong.position.set(31.2 + Math.cos(0.5) * s * 0.3 + Math.sin(0.5) * 0.85, 0.4, -12.6 - Math.sin(0.5) * s * 0.3 + Math.cos(0.5) * 0.85);
@@ -214,6 +235,9 @@ export class Room {
     for (const o of this.obstacles) {
       if (Math.abs(x - o.x) < o.hw + r && Math.abs(z - o.z) < o.hd + r) return true;
     }
+    for (const c of this.circles) {
+      if (Math.hypot(x - c.x, z - c.z) < c.r + r) return true;
+    }
     return false;
   }
 
@@ -238,6 +262,7 @@ export class Room {
         else pos.z += (dz >= 0 ? 1 : -1) * oz;
       }
     }
+    for (const c of this.circles) Room.pushCircle(pos, r, c.x, c.z, c.r);
   }
 
   spawnPoint() {

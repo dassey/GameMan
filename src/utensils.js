@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { box, ball, cyl, eyes, floorMark } from './art.js';
+import { Room } from './room.js';
 
 const tmp = new THREE.Vector3();
 const STATS = { spoon: { xp: 30, radius: 1.2 }, fork: { xp: 40, radius: 1.0 }, knife: { xp: 20, radius: 0.9 } };
@@ -107,6 +108,16 @@ export class Utensils {
 
   vulnerable(u) {
     return u.kind !== 'spoon' || u.state === 'up';
+  }
+
+  pushOut(pos, r) {
+    let touched = false;
+    for (const u of this.alive) {
+      if (u.kind === 'spoon' && u.state !== 'up') continue;
+      if (Room.pushCircle(pos, r, u.pos.x, u.pos.z, u.radius)) touched = true;
+    }
+    if (touched) this.room.resolve(pos, r);
+    return touched;
   }
 
   hitTest(point, r) {

@@ -18,6 +18,7 @@ export class Player {
     this.invuln = 0;
     this.radius = 0.6;
     this.held = null;
+    this.vr = false;
     this.moving = false;
     this.walkT = 0;
     this.aim = new THREE.Vector3(0, 0, -1);
@@ -56,7 +57,7 @@ export class Player {
     return this.hand.getWorldPosition(out);
   }
 
-  update(dt, keys, aimPoint) {
+  update(dt, keys, aimPoint, move = null) {
     this.invuln = Math.max(0, this.invuln - dt);
     this.boostT = Math.max(0, this.boostT - dt);
     if (this.knocked > 0) {
@@ -69,18 +70,25 @@ export class Player {
         this.group.rotation.z = 0;
         this.invuln = 2;
       }
+      if (this.vr) this.group.visible = false;
       return;
     }
     let mx = 0, mz = 0;
-    if (keys.has('KeyW') || keys.has('ArrowUp')) mz -= 1;
-    if (keys.has('KeyS') || keys.has('ArrowDown')) mz += 1;
-    if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
-    if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
-    this.moving = mx !== 0 || mz !== 0;
+    if (move) {
+      mx = move.x;
+      mz = move.z;
+    } else {
+      if (keys.has('KeyW') || keys.has('ArrowUp')) mz -= 1;
+      if (keys.has('KeyS') || keys.has('ArrowDown')) mz += 1;
+      if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
+      if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
+    }
+    const len = Math.hypot(mx, mz);
+    this.moving = len > 0.01;
     if (this.moving) {
-      const len = Math.hypot(mx, mz);
-      this.pos.x += (mx / len) * this.speed * dt;
-      this.pos.z += (mz / len) * this.speed * dt;
+      const k = len > 1 ? 1 / len : 1;
+      this.pos.x += mx * k * this.speed * dt;
+      this.pos.z += mz * k * this.speed * dt;
       this.room.resolve(this.pos, this.radius);
     }
     if (aimPoint) {
@@ -96,7 +104,7 @@ export class Player {
     this.armL.rotation.x = -swing * 0.8;
     this.armR.rotation.x = swing * 0.8;
     this.group.position.set(this.pos.x, this.moving ? Math.abs(Math.sin(this.walkT)) * 0.12 : 0, this.pos.z);
-    this.group.visible = this.invuln > 0 ? Math.floor(this.invuln * 20) % 2 === 0 : true;
+    this.group.visible = this.vr ? false : (this.invuln > 0 ? Math.floor(this.invuln * 20) % 2 === 0 : true);
   }
 
   takeDamage(n, from) {
