@@ -15,6 +15,8 @@ export class Grapple {
     this.speed = 34;
     this.travelled = 0;
     this.originObj = null;
+    this.carry = null;
+    this.delivered = null;
     this.knife = new THREE.Group();
     const blade = box(0.2, 1.4, 0.07, '#d8dce6');
     blade.position.y = 0.9;
@@ -62,7 +64,13 @@ export class Grapple {
     return true;
   }
 
-  update(dt, utensils) {
+  takeDelivered() {
+    const d = this.delivered;
+    this.delivered = null;
+    return d;
+  }
+
+  update(dt, utensils, fruits = null, toppings = null) {
     if (this.state === 'idle') return null;
     let hit = null;
     this.origin(tmp);
@@ -71,7 +79,14 @@ export class Grapple {
       this.pos.addScaledVector(this.dir, step);
       this.travelled += step;
       hit = utensils.hitTest(this.pos, 0.9);
-      if (hit || this.travelled >= this.range || this.pos.y < 0.15) this.state = 'back';
+      if (!hit) {
+        const f = fruits && fruits.findAt(this.pos, 0.6);
+        const t = !f && toppings && toppings.findAt(this.pos, 0.6);
+        if (f) this.carry = { kind: 'fruit', item: f };
+        else if (t) this.carry = { kind: 'topping', item: t };
+        if (this.carry) this.carry.item.carried = true;
+      }
+      if (hit || this.carry || this.travelled >= this.range || this.pos.y < 0.15) this.state = 'back';
       target.copy(this.pos).add(this.dir);
     } else {
       target.copy(tmp);
@@ -82,9 +97,17 @@ export class Grapple {
         this.state = 'idle';
         this.knife.visible = false;
         this.chain.visible = false;
+        if (this.carry) {
+          this.delivered = this.carry;
+          this.carry = null;
+        }
         return hit;
       }
       this.pos.addScaledVector(tmp.normalize(), step);
+      if (this.carry) {
+        this.carry.item.group.position.set(this.pos.x, Math.max(0.2, this.pos.y - 0.5), this.pos.z);
+        this.carry.item.pos.set(this.pos.x, 0, this.pos.z);
+      }
     }
     this.knife.position.copy(this.pos);
     this.knife.lookAt(target);

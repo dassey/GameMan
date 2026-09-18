@@ -44,6 +44,7 @@ export class Toppings {
       this.t = 11;
     }
     for (const it of this.items) {
+      if (it.carried) continue;
       it.group.position.y = 0.2 + Math.abs(Math.sin(this.time * 4)) * 0.3;
       it.group.rotation.y += dt * 1.5;
     }
@@ -52,12 +53,27 @@ export class Toppings {
   pickup(pos, r) {
     for (let i = 0; i < this.items.length; i++) {
       const it = this.items[i];
-      if (Math.hypot(pos.x - it.pos.x, pos.z - it.pos.z) < r + 1.0) {
+      if (!it.carried && Math.hypot(pos.x - it.pos.x, pos.z - it.pos.z) < r + 1.0) {
         this.scene.remove(it.group);
         this.items.splice(i, 1);
         return it.kind;
       }
     }
     return null;
+  }
+
+  findAt(pos, r) {
+    for (const it of this.items) {
+      if (!it.carried && Math.hypot(pos.x - it.pos.x, pos.z - it.pos.z) < r + 1.0) return it;
+    }
+    return null;
+  }
+
+  remove(it) {
+    const i = this.items.indexOf(it);
+    if (i < 0) return null;
+    this.items.splice(i, 1);
+    this.scene.remove(it.group);
+    return it.kind;
   }
 }

@@ -59,6 +59,7 @@ export class Fruits {
   update(dt) {
     this.t += dt;
     for (const it of this.items) {
+      if (it.carried) continue;
       it.group.position.y = 0.15 + Math.sin(this.t * 3 + it.phase) * 0.15;
       it.group.rotation.y += dt * 1.2;
     }
@@ -68,13 +69,28 @@ export class Fruits {
     const got = [];
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
-      if (Math.hypot(pos.x - it.pos.x, pos.z - it.pos.z) < r + 1.0) {
+      if (!it.carried && Math.hypot(pos.x - it.pos.x, pos.z - it.pos.z) < r + 1.0) {
         this.scene.remove(it.group);
         got.push(it.kind);
         this.items.splice(i, 1);
       }
     }
     return got;
+  }
+
+  findAt(pos, r) {
+    for (const it of this.items) {
+      if (!it.carried && Math.hypot(pos.x - it.pos.x, pos.z - it.pos.z) < r + 1.0) return it;
+    }
+    return null;
+  }
+
+  remove(it) {
+    const i = this.items.indexOf(it);
+    if (i < 0) return null;
+    this.items.splice(i, 1);
+    this.scene.remove(it.group);
+    return it.kind;
   }
 }
 

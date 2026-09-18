@@ -73,15 +73,23 @@ export class Player {
       if (this.vr) this.group.visible = false;
       return;
     }
+    if (aimPoint) {
+      tmp.subVectors(aimPoint, this.pos);
+      tmp.y = 0;
+      if (tmp.lengthSq() > 0.01) this.aim.copy(tmp).normalize();
+    }
     let mx = 0, mz = 0;
     if (move) {
       mx = move.x;
       mz = move.z;
     } else {
-      if (keys.has('KeyW') || keys.has('ArrowUp')) mz -= 1;
-      if (keys.has('KeyS') || keys.has('ArrowDown')) mz += 1;
-      if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
-      if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
+      let fwd = 0, side = 0;
+      if (keys.has('KeyW') || keys.has('ArrowUp')) fwd += 1;
+      if (keys.has('KeyS') || keys.has('ArrowDown')) fwd -= 1;
+      if (keys.has('KeyA') || keys.has('ArrowLeft')) side -= 1;
+      if (keys.has('KeyD') || keys.has('ArrowRight')) side += 1;
+      mx = this.aim.x * fwd - this.aim.z * side;
+      mz = this.aim.z * fwd + this.aim.x * side;
     }
     const len = Math.hypot(mx, mz);
     this.moving = len > 0.01;
@@ -90,11 +98,6 @@ export class Player {
       this.pos.x += mx * k * this.speed * dt;
       this.pos.z += mz * k * this.speed * dt;
       this.room.resolve(this.pos, this.radius);
-    }
-    if (aimPoint) {
-      tmp.subVectors(aimPoint, this.pos);
-      tmp.y = 0;
-      if (tmp.lengthSq() > 0.01) this.aim.copy(tmp).normalize();
     }
     this.group.rotation.y = Math.atan2(this.aim.x, this.aim.z);
     this.walkT += dt * (this.moving ? 13 : 0);

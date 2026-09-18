@@ -148,6 +148,32 @@ function boot() {
     player.held = null;
   }
 
+  function onFruit(got) {
+    if (!got || !got.length) return;
+    audio.grab();
+    particles.burst(tmp.set(player.pos.x, 1.2, player.pos.z), 10, 0xf2d43c, 6);
+    prog.addXP(5 * got.length);
+    if (fruits.remaining === 0 && state.phase === 'collect') startDefend();
+    else hud.message(`${fruits.remaining} FRUIT LEFT`, '', 1);
+  }
+
+  function onTopping(tp) {
+    if (!tp) return;
+    player.held = tp;
+    audio.grab();
+    hud.message(tp === 'ranch' ? 'GOT RANCH' : 'GOT A CROUTON', state.vr ? 'press A to use it' : 'press E to use it', 2);
+  }
+
+  function onDelivery(d) {
+    if (!d) return;
+    if (d.kind === 'fruit') {
+      const kind = fruits.remove(d.item);
+      if (kind) onFruit([kind]);
+    } else {
+      onTopping(toppings.remove(d.item));
+    }
+  }
+
   function startDefend() {
     salad = new Salad(scene, new THREE.Vector3(0, 0, -2));
     room.addCircle(salad.pos.x, salad.pos.z, salad.radius);
@@ -290,24 +316,13 @@ function boot() {
       }
       fruits.update(dt);
       toppings.update(dt);
-      const got = fruits.collect(player.pos, player.radius);
-      if (got.length) {
-        audio.grab();
-        particles.burst(tmp.set(player.pos.x, 1.2, player.pos.z), 10, 0xf2d43c, 6);
-        prog.addXP(5 * got.length);
-        if (fruits.remaining === 0 && state.phase === 'collect') startDefend();
-        else hud.message(`${fruits.remaining} FRUIT LEFT`, '', 1);
-      }
-      const tp = toppings.pickup(player.pos, player.radius);
-      if (tp) {
-        player.held = tp;
-        audio.grab();
-        hud.message(tp === 'ranch' ? 'GOT RANCH' : 'GOT A CROUTON', state.vr ? 'press A to use it' : 'press E to use it', 2);
-      }
+      onFruit(fruits.collect(player.pos, player.radius));
+      onTopping(toppings.pickup(player.pos, player.radius));
       if (state.phase === 'defend') {
         salad.update(dt);
         const ev = utensils.update(dt);
-        const hit = grapple.update(dt, utensils);
+        const hit = grapple.update(dt, utensils, fruits, toppings);
+        onDelivery(grapple.takeDelivered());
         if (hit) {
           ev.kills.push(utensils.kill(hit));
           audio.hit();
@@ -330,7 +345,8 @@ function boot() {
         if (utensils.killed >= utensils.total) startWin();
         else if (salad.dead) startLose();
       } else {
-        grapple.update(dt, noUtensils);
+        grapple.update(dt, noUtensils, fruits, toppings);
+        onDelivery(grapple.takeDelivered());
       }
       if (state.vr) {
         vr.frameEnd();
