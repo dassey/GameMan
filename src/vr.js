@@ -68,6 +68,10 @@ export class VRPanel {
       g.fillStyle = '#efe9d8';
       g.fillText(`HOLDING ${s.held.toUpperCase()}  (press A)`, 16, 108);
     }
+    if (s.ketchup) {
+      g.fillStyle = '#e0503a';
+      g.fillText('KETCHUP  (press B)', 300, 78);
+    }
     if (s.boost > 0) {
       g.fillStyle = '#c89a5a';
       g.fillText(`CROUTON SPEED ${Math.ceil(s.boost)}`, 300, 108);
@@ -86,49 +90,44 @@ export class VRPanel {
   }
 }
 
-export class VRLemon {
-  constructor(camera) {
-    this.canvas = document.createElement('canvas');
-    this.canvas.width = 520;
-    this.canvas.height = 520;
-    this.tex = new THREE.CanvasTexture(this.canvas);
+export class VRScare {
+  constructor(camera, canvas) {
+    this.tex = new THREE.CanvasTexture(canvas);
     this.tex.colorSpace = THREE.SRGBColorSpace;
     this.group = new THREE.Group();
-    const bg = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshBasicMaterial({ color: 0xf3e03a, depthTest: false }));
-    bg.position.z = -1.9;
+    const bg = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshBasicMaterial({ color: 0x000000, depthTest: false }));
+    bg.position.z = -1.2;
     bg.renderOrder = 999;
-    this.face = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 1.7), new THREE.MeshBasicMaterial({ map: this.tex, transparent: true, depthTest: false }));
-    this.face.position.z = -1.7;
+    this.face = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 2.8), new THREE.MeshBasicMaterial({ map: this.tex, depthTest: false }));
+    this.face.position.z = -1.1;
     this.face.renderOrder = 1000;
     this.group.add(bg, this.face);
     this.group.visible = false;
     camera.add(this.group);
-    this.t = 0;
   }
 
-  show(drawFn) {
-    drawFn(this.canvas);
+  refresh() {
+    this.tex.needsUpdate = true;
+  }
+
+  show() {
     this.tex.needsUpdate = true;
     this.group.visible = true;
-    this.t = 0;
   }
 
   hide() {
     this.group.visible = false;
   }
 
-  update(dt) {
+  update() {
     if (!this.group.visible) return;
-    this.t += dt;
-    const s = Math.min(1, 0.1 + this.t * 2.2);
-    this.face.scale.setScalar(s);
-    this.face.position.x = (Math.random() - 0.5) * 0.08;
-    this.face.position.y = (Math.random() - 0.5) * 0.08;
+    this.face.position.x = (Math.random() - 0.5) * 0.06;
+    this.face.position.y = (Math.random() - 0.5) * 0.06;
   }
 }
 
 export class VR {
-  constructor(renderer, scene, camera, player, room) {
+  constructor(renderer, scene, camera, player, room, scareCanvas) {
     this.renderer = renderer;
     this.camera = camera;
     this.player = player;
@@ -141,6 +140,7 @@ export class VR {
     this.lastHead = new THREE.Vector3();
     this.snapCd = 0;
     this.aHeld = false;
+    this.bHeld = false;
     this.onFire = null;
     this.onStart = null;
     this.onEnd = null;
@@ -151,6 +151,7 @@ export class VR {
     for (let i = 0; i < 2; i++) {
       const c = renderer.xr.getController(i);
       c.addEventListener('selectstart', () => { if (this.onFire) this.onFire(c); });
+      c.addEventListener('connected', (e) => { c.userData.hand = e.data.handedness; });
       this.dolly.add(c);
       const grip = renderer.xr.getControllerGrip(i);
       grip.add(handMesh());
@@ -160,7 +161,7 @@ export class VR {
     renderer.xr.addEventListener('sessionstart', () => this.begin());
     renderer.xr.addEventListener('sessionend', () => this.end());
     this.panel = new VRPanel(camera);
-    this.lemon = new VRLemon(camera);
+    this.scare = new VRScare(camera, scareCanvas);
   }
 
   static async supported() {
@@ -197,8 +198,13 @@ export class VR {
     this.dolly.position.set(0, 0, 0);
     this.camera.rotation.set(0, 0, 0);
     this.panel.mesh.visible = false;
-    this.lemon.hide();
+    this.scare.hide();
     if (this.onEnd) this.onEnd();
+  }
+
+  aimRay(origin, dir) {
+    const c = this.controllers.find((k) => k.userData.hand === 'right') || this.controllers[0];
+    return this.controllerRay(c, origin, dir);
   }
 
   controllerRay(c, origin, dir) {
@@ -219,7 +225,7 @@ export class VR {
 
   input(dt) {
     const move = { x: 0, z: 0 };
-    let a = false;
+    let a = false, b = false;
     this.snapCd = Math.max(0, this.snapCd - dt);
     const session = this.renderer.xr.getSession();
     if (session) {
@@ -244,11 +250,13 @@ export class VR {
           }
         }
         if (gp.buttons[4] && gp.buttons[4].pressed) a = true;
+        if (gp.buttons[5] && gp.buttons[5].pressed) b = true;
       }
     }
-    const aEdge = a && !this.aHeld;
+    const aEdge = a && !this.aHeld, bEdge = b && !this.bHeld;
     this.aHeld = a;
-    return { move, a: aEdge };
+    this.bHeld = b;
+    return { move, a: aEdge, b: bEdge };
   }
 
   snapTurn(angle) {

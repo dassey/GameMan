@@ -13,6 +13,14 @@ export function toppingMesh(kind) {
     const label = box(0.6, 0.5, 0.06, '#3a7a2a');
     label.position.set(0, 0.6, 0.5);
     g.add(bottle, neck, cap, label);
+  } else if (kind === 'ketchup') {
+    const packet = box(1.2, 0.2, 1.6, '#d0301a');
+    packet.position.y = 0.6;
+    packet.rotation.x = -0.6;
+    const label = box(0.7, 0.22, 0.6, '#f4f1e6');
+    label.position.set(0, 0.62, 0.02);
+    label.rotation.x = -0.6;
+    g.add(packet, label);
   } else {
     const c = box(1.0, 0.8, 1.0, '#c89a5a', { seed: 5 });
     c.position.y = 0.5;
@@ -29,18 +37,24 @@ export class Toppings {
     this.items = [];
     this.t = 5;
     this.time = 0;
+    this.spawnItem('ketchup');
+  }
+
+  spawnItem(kind) {
+    const p = this.room.freeSpot(1.2, 4, Math.random, { x: 0, z: 14 }, 8);
+    const g = toppingMesh(kind);
+    g.position.copy(p);
+    this.scene.add(g);
+    const it = { kind, group: g, pos: p };
+    this.items.push(it);
+    return it;
   }
 
   update(dt) {
     this.time += dt;
     this.t -= dt;
-    if (this.t <= 0 && this.items.length < 2) {
-      const kind = Math.random() < 0.55 ? 'ranch' : 'crouton';
-      const p = this.room.freeSpot(1.2, 4);
-      const g = toppingMesh(kind);
-      g.position.copy(p);
-      this.scene.add(g);
-      this.items.push({ kind, group: g, pos: p });
+    if (this.t <= 0 && this.items.filter((it) => it.kind !== 'ketchup').length < 2) {
+      this.spawnItem(Math.random() < 0.55 ? 'ranch' : 'crouton');
       this.t = 11;
     }
     for (const it of this.items) {

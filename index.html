@@ -22,6 +22,7 @@
   #right { position: absolute; top: 14px; right: 18px; text-align: right; font-size: 18px; font-weight: bold; color: var(--y); }
   #fruit { color: #f5931e; }
   #topping { position: absolute; bottom: 14px; left: 16px; font-size: 17px; font-weight: bold; color: var(--paper); }
+  #ketchup { position: absolute; bottom: 64px; left: 16px; font-size: 17px; font-weight: bold; color: #ff6a4a; }
   #boost { position: absolute; bottom: 40px; left: 16px; font-size: 15px; color: #c89a5a; }
   #hint { position: absolute; bottom: 14px; right: 16px; font-size: 13px; color: #b8c0d8; }
   #msg { position: absolute; top: 26%; width: 100%; text-align: center; font-size: 46px; font-weight: bold; color: var(--y); opacity: 0; transition: opacity .3s; transform: rotate(-2deg); }
@@ -38,10 +39,9 @@
   .cols b { color: var(--y); }
   label { display: block; margin-top: 14px; font-size: 15px; cursor: pointer; }
   input[type=checkbox] { width: 18px; height: 18px; vertical-align: middle; accent-color: #f2d43c; }
-  #scare { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #f3e03a; z-index: 7; animation: shake .08s infinite; }
-  #scare canvas { width: min(90vw, 90vh); height: min(90vw, 90vh); animation: grow .5s ease-out; }
+  #scare { position: fixed; inset: -40px; display: none; background: #000; z-index: 7; animation: shake .08s infinite; }
+  #scare canvas { display: block; width: calc(100vw + 80px); height: calc(100vh + 80px); object-fit: cover; }
   @keyframes shake { 0% { transform: translate(0,0); } 25% { transform: translate(-14px, 8px); } 50% { transform: translate(12px, -10px); } 75% { transform: translate(-8px, -12px); } 100% { transform: translate(10px, 12px); } }
-  @keyframes grow { from { transform: scale(0.1); } to { transform: scale(1); } }
   #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #181a2c; z-index: 9; color: var(--y); font-size: 24px; }
 </style>
 </head>
@@ -63,9 +63,10 @@
   </div>
   <div id="right"><div id="left"></div><div id="fruit"></div></div>
   <div id="boost"></div>
+  <div id="ketchup"></div>
   <div id="topping"></div>
   <div id="msg"></div><div id="submsg"></div>
-  <div id="hint">mouse aim · W walk toward mouse · S back · A/D sidestep · click throw knife (grabs fruit too) · E use topping · Esc menu</div>
+  <div id="hint">mouse aim · W walk toward mouse · S back · A/D sidestep · click throw knife (grabs fruit too) · E use topping · Q ketchup · Esc menu</div>
   <div id="flash"></div>
 </div>
 <div id="overlay">
@@ -73,14 +74,14 @@
     <h1>SALAD DEFENDER NINJA</h1>
     <h2>Mellow vs. the giant utensils</h2>
     <div class="cols">
-      <div><b>HOW TO PLAY</b><br>Mouse: aim<br>W: walk toward the mouse · S: back<br>A / D: sidestep<br>Click: throw the knife on a chain<br>It grabs fruit and toppings too<br>E: use the topping you're holding<br>Esc: menu<br><b>IN VR</b><br>Left stick: walk · Right stick: turn<br>Trigger: throw the knife · A: use topping</div>
+      <div><b>HOW TO PLAY</b><br>Mouse: aim<br>W: walk toward the mouse · S: back<br>A / D: sidestep<br>Click: throw the knife on a chain<br>It grabs fruit and toppings too<br>E: use the topping you're holding<br>Q: squirt the ketchup packet<br>Esc: menu<br><b>IN VR</b><br>Left stick: walk · Right stick: turn<br>Trigger: throw the knife<br>A: use topping · B: ketchup</div>
       <div><b>THE PLAN</b><br>1. Grab every banana, mango and orange<br>2. They become a GIANT salad<br>3. Defend it from 17 utensils<br>Spoons pop up from underground<br>Forks spin and chase YOU<br>Knives go straight for the salad</div>
     </div>
     <label><input type="checkbox" id="inf"> Infinite health for Mellow</label>
     <div style="margin-top:14px"><button id="playbtn">PLAY</button><button id="vrbtn" disabled>CHECKING VR...</button></div>
   </div>
 </div>
-<div id="scare"><canvas id="lemon"></canvas></div>
+<div id="scare"></div>
 <div id="end">
   <div class="panel">
     <h1 id="endtitle">GAME OVER</h1>

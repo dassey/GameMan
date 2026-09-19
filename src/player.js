@@ -18,6 +18,8 @@ export class Player {
     this.invuln = 0;
     this.radius = 0.6;
     this.held = null;
+    this.ketchup = false;
+    this.stuck = false;
     this.vr = false;
     this.moving = false;
     this.walkT = 0;
@@ -90,6 +92,10 @@ export class Player {
       if (keys.has('KeyD') || keys.has('ArrowRight')) side += 1;
       mx = this.aim.x * fwd - this.aim.z * side;
       mz = this.aim.z * fwd + this.aim.x * side;
+    }
+    if (this.stuck) {
+      mx = 0;
+      mz = 0;
     }
     const len = Math.hypot(mx, mz);
     this.moving = len > 0.01;

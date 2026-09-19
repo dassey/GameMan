@@ -77,6 +77,11 @@ export class Audio {
     this.tone(90, 0.1, 'square', 0.15, 0.6);
   }
 
+  bonk() {
+    this.tone(240, 0.12, 'square', 0.25, 0.4);
+    this.noise(0.05, 0.2, 0, 2000);
+  }
+
   hurt() {
     this.tone(160, 0.25, 'sawtooth', 0.2, 0.5);
   }

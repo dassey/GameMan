@@ -11,6 +11,9 @@ import { HUD } from './hud.js';
 import { Audio } from './audio.js';
 import { Grain } from './grain.js';
 import { VR } from './vr.js';
+import { SirLemon, Ketchup, ketchupGlob } from './lemon.js';
+import { initScare } from './scare.js';
+import { floorMark } from './art.js';
 
 const $ = (id) => document.getElementById(id);
 const CAM_OFFSET = new THREE.Vector3(0, 22, 13);
@@ -22,74 +25,6 @@ const tmp = new THREE.Vector3();
 const rayOrigin = new THREE.Vector3();
 const rayDir = new THREE.Vector3();
 const noUtensils = { hitTest: () => null };
-
-function drawLemon(canvas) {
-  const w = canvas.width = 520, h = canvas.height = 520;
-  const g = canvas.getContext('2d');
-  g.clearRect(0, 0, w, h);
-  g.save();
-  g.translate(w / 2, h / 2);
-  g.rotate(-0.25);
-  g.fillStyle = '#f3e03a';
-  g.strokeStyle = '#3a2f10';
-  g.lineWidth = 10;
-  g.beginPath();
-  g.ellipse(0, 0, 215, 150, 0, 0, Math.PI * 2);
-  g.fill();
-  g.stroke();
-  for (const s of [-1, 1]) {
-    g.beginPath();
-    g.moveTo(s * 190, -45);
-    g.lineTo(s * 255, -10);
-    g.lineTo(s * 190, 40);
-    g.closePath();
-    g.fill();
-    g.stroke();
-  }
-  g.fillStyle = 'rgba(120,100,20,0.35)';
-  for (let i = 0; i < 90; i++) {
-    const a = Math.random() * 6.283, r = Math.random() * 180;
-    g.beginPath();
-    g.arc(Math.cos(a) * r, Math.sin(a) * r * 0.65, 2 + Math.random() * 4, 0, 6.283);
-    g.fill();
-  }
-  for (const s of [-1, 1]) {
-    g.fillStyle = '#ffffff';
-    g.beginPath();
-    g.ellipse(s * 70, -45, 40, 48, 0, 0, 6.283);
-    g.fill();
-    g.stroke();
-    g.fillStyle = '#100c08';
-    g.beginPath();
-    g.arc(s * 62, -38, 14, 0, 6.283);
-    g.fill();
-    g.lineWidth = 14;
-    g.beginPath();
-    g.moveTo(s * 20, -110);
-    g.lineTo(s * 115, -80);
-    g.stroke();
-    g.lineWidth = 10;
-  }
-  g.fillStyle = '#100c08';
-  g.beginPath();
-  g.ellipse(0, 60, 95, 62, 0, 0, 6.283);
-  g.fill();
-  g.stroke();
-  g.fillStyle = '#b0202a';
-  g.beginPath();
-  g.ellipse(0, 85, 55, 30, 0, 0, 6.283);
-  g.fill();
-  g.fillStyle = '#ffffff';
-  for (let i = -3; i <= 3; i++) {
-    g.beginPath();
-    g.moveTo(i * 24 - 11, 4);
-    g.lineTo(i * 24 + 11, 4);
-    g.lineTo(i * 24, 34);
-    g.closePath();
-    g.fill();
-  }
-  g.restore();
-}
 
 function boot() {
   const canvas = $('gl');
@@ -115,7 +50,15 @@ function boot() {
   const toppings = new Toppings(scene, room);
   const particles = new Particles(scene);
   const prog = new Progression();
-  const vr = new VR(renderer, scene, camera, player, room);
+  let vr = null;
+  const scareCanvas = initScare(() => { if (vr) vr.scare.refresh(); });
+  $('scare').appendChild(scareCanvas);
+  vr = new VR(renderer, scene, camera, player, room, scareCanvas);
+  const lemon = new SirLemon(scene, room, particles, audio);
+  const ketchup = new Ketchup(scene, particles);
+  const stuckMark = floorMark(1.2, 0xd0301a);
+  stuckMark.visible = false;
+  scene.add(stuckMark);
   let salad = null, utensils = null;
   const state = { phase: 'menu', paused: false, loseT: 0, scared: false, ended: false, vr: false };
   const keys = new Set();
@@ -159,6 +102,12 @@ function boot() {
 
   function onTopping(tp) {
     if (!tp) return;
+    if (tp === 'ketchup') {
+      player.ketchup = true;
+      audio.grab();
+      hud.message('GOT THE KETCHUP PACKET', state.vr ? 'press B to squirt it. There is only one!' : 'press Q to squirt it. There is only one!', 3);
+      return;
+    }
     player.held = tp;
     audio.grab();
     hud.message(tp === 'ranch' ? 'GOT RANCH' : 'GOT A CROUTON', state.vr ? 'press A to use it' : 'press E to use it', 2);
@@ -172,6 +121,49 @@ function boot() {
     } else {
       onTopping(toppings.remove(d.item));
     }
+  }
+
+  function gainXP(n) {
+    if (!n) return;
+    const ups = prog.addXP(n);
+    if (ups) {
+      audio.levelup();
+      hud.message(`LEVEL ${prog.level}!`, 'faster, and the chain reaches further', 2);
+    }
+  }
+
+  function useKetchup() {
+    if (!playing() || !player.ketchup || player.knocked > 0 || ketchup.active) return;
+    if (state.vr) {
+      vr.aimRay(rayOrigin, rayDir);
+    } else {
+      player.handPos(rayOrigin);
+      rayOrigin.y = 1.2;
+      rayDir.copy(player.aim);
+    }
+    player.ketchup = false;
+    ketchup.fire(rayOrigin, rayDir);
+    audio.spray();
+  }
+
+  function onKetchupHit(kr) {
+    if (kr.hit === 'utensil') {
+      kr.u.stuck = true;
+      kr.u.group.add(ketchupGlob(kr.u.radius + 0.3));
+      lemon.summon(kr.u, 'utensil');
+      hud.message('KETCHUPPED!', 'Sir Lemon is coming to finish it', 2.5);
+    } else if (kr.hit === 'salad') {
+      player.stuck = true;
+      lemon.summon(player, 'player');
+      hud.message('YOU KETCHUPPED THE SALAD!', 'Sir Lemon is coming for YOU', 3);
+    } else {
+      hud.message('MISSED!', 'the ketchup packet is empty', 2);
+    }
+  }
+
+  function releasePlayer() {
+    player.stuck = false;
+    lemon.leave();
   }
 
   function startDefend() {
@@ -196,7 +188,7 @@ function boot() {
   function showEnd(title, text) {
     state.ended = true;
     $('scare').style.display = 'none';
-    vr.lemon.hide();
+    vr.scare.hide();
     $('endtitle').textContent = title;
     $('endtext').textContent = text;
     $('end').style.display = 'flex';
@@ -225,6 +217,7 @@ function boot() {
       if (state.paused) { state.paused = false; $('overlay').style.display = 'none'; } else openMenu();
     }
     if (e.code === 'KeyE') useTopping();
+    if (e.code === 'KeyQ') useKetchup();
     if (e.code === 'Space') e.preventDefault();
   });
   addEventListener('keyup', (e) => keys.delete(e.code));
@@ -293,7 +286,8 @@ function boot() {
         if (state.ended) location.reload();
         else useTopping();
       }
-      vr.lemon.update(dt);
+      if (vrIn.b) useKetchup();
+      vr.scare.update();
     }
     if (playing()) {
       room.update(dt, player.pos);
@@ -318,6 +312,20 @@ function boot() {
       toppings.update(dt);
       onFruit(fruits.collect(player.pos, player.radius));
       onTopping(toppings.pickup(player.pos, player.radius));
+      const kr = ketchup.update(dt, utensils, salad);
+      if (kr) onKetchupHit(kr);
+      const lo = lemon.update(dt, utensils);
+      if (lo) {
+        gainXP(lo.xp);
+        if (lo.playerBonk) {
+          const r = player.takeDamage(25, null);
+          audio.hurt();
+          if (r === 'ko' || (player.infinite && lemon.hits >= 6)) releasePlayer();
+        }
+      }
+      if (player.stuck && (player.knocked > 0 || !lemon.active)) releasePlayer();
+      stuckMark.visible = player.stuck;
+      stuckMark.position.set(player.pos.x, 0.04, player.pos.z);
       if (state.phase === 'defend') {
         salad.update(dt);
         const ev = utensils.update(dt);
@@ -334,13 +342,7 @@ function boot() {
         }
         let xpGain = 0;
         for (const xp of ev.kills) xpGain += xp;
-        if (xpGain) {
-          const ups = prog.addXP(xpGain);
-          if (ups) {
-            audio.levelup();
-            hud.message(`LEVEL ${prog.level}!`, 'faster, and the chain reaches further', 2);
-          }
-        }
+        gainXP(xpGain);
         $('flash').style.opacity = ev.saladDamage ? 0.25 : 0;
         if (utensils.killed >= utensils.total) startWin();
         else if (salad.dead) startLose();
@@ -372,12 +374,8 @@ function boot() {
       }
       if (state.loseT > 2.6 && !state.scared) {
         state.scared = true;
-        if (state.vr) {
-          vr.lemon.show(drawLemon);
-        } else {
-          drawLemon($('lemon'));
-          $('scare').style.display = 'flex';
-        }
+        if (state.vr) vr.scare.show();
+        else $('scare').style.display = 'block';
         audio.scream();
       }
       if (state.loseT > 4.4 && !state.ended) showEnd('GAME OVER', 'The utensils ate the whole salad.');
@@ -391,7 +389,7 @@ function boot() {
     }
     const hs = {
       salad, hp: player.hp, maxHp: player.maxHp, level: prog.level, xp: prog.xp, xpToNext: prog.xpToNext,
-      utensilsLeft: utensils ? utensils.remaining : null, fruitLeft: fruits.remaining, held: player.held, boost: player.boostT,
+      utensilsLeft: utensils ? utensils.remaining : null, fruitLeft: fruits.remaining, held: player.held, boost: player.boostT, ketchup: player.ketchup,
     };
     hud.update(hs, dt);
     if (state.vr) vr.panel.update(dt, hs, hud.msgT > 0 ? hud.el.msg.textContent : '', hud.el.submsg.textContent);
@@ -405,7 +403,7 @@ function boot() {
     tick(dt, now);
   });
 
-  window.game = { scene, camera, room, player, grapple, fruits, toppings, prog, state, vr, get salad() { return salad; }, get utensils() { return utensils; }, startDefend, tick };
+  window.game = { scene, camera, room, player, grapple, fruits, toppings, prog, state, vr, lemon, ketchup, useKetchup, get salad() { return salad; }, get utensils() { return utensils; }, startDefend, tick };
 }
 
 boot();

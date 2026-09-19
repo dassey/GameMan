@@ -180,6 +180,11 @@ export class Utensils {
         this.audio.melt();
         continue;
       }
+      if (u.stuck) {
+        u.group.position.x = u.pos.x + (Math.random() - 0.5) * 0.08;
+        u.group.position.z = u.pos.z + (Math.random() - 0.5) * 0.08;
+        continue;
+      }
       if (u.kind === 'knife') {
         const d = Math.hypot(u.pos.x - salad.pos.x, u.pos.z - salad.pos.z);
         if (d > salad.radius + 0.8) {

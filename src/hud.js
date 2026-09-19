@@ -4,7 +4,7 @@ export class HUD {
   constructor() {
     this.el = {
       saladwrap: $('saladwrap'), saladbar: $('saladbar'), hpbar: $('hpbar'), level: $('level'), xpbar: $('xpbar'),
-      left: $('left'), fruit: $('fruit'), topping: $('topping'), msg: $('msg'), submsg: $('submsg'), boost: $('boost'),
+      left: $('left'), fruit: $('fruit'), topping: $('topping'), msg: $('msg'), submsg: $('submsg'), boost: $('boost'), ketchup: $('ketchup'),
     };
     this.msgT = 0;
   }
@@ -20,6 +20,7 @@ export class HUD {
     e.fruit.textContent = s.fruitLeft > 0 ? `FRUIT LEFT: ${s.fruitLeft}` : '';
     e.topping.textContent = s.held ? `HOLDING ${s.held.toUpperCase()}  (press E)` : '';
     e.boost.textContent = s.boost > 0 ? `CROUTON SPEED ${Math.ceil(s.boost)}` : '';
+    e.ketchup.textContent = s.ketchup ? 'KETCHUP PACKET  (press Q)' : '';
     this.msgT -= dt;
     if (this.msgT <= 0) {
       e.msg.style.opacity = 0;
