@@ -79,6 +79,6 @@ export function initScare(onChange) {
     g.drawImage(img, 0, 0, 512, 512);
     if (onChange) onChange();
   };
-  img.src = 'assets/scare.png';
+  img.src = 'scare.png';
   return canvas;
 }
